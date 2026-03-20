@@ -20,17 +20,65 @@
           >
           <button class="btn-primary" style="padding: 4px 8px" @click="addSubgraph">+</button>
         </div>
+        <div class="prop-row">
+          <label style="width: 30px">填充</label>
+          <input
+            type="color"
+            v-model="newSubgraph.fill"
+            style="width: 40px; height: 24px"
+          >
+          <label style="width: 30px">边框</label>
+          <input
+            type="color"
+            v-model="newSubgraph.stroke"
+            style="width: 40px; height: 24px"
+          >
+        </div>
         <div class="subgraph-list">
           <div v-if="subgraphs.length === 0" class="empty-hint">暂无子图</div>
           <div
             v-for="sg in subgraphs"
             :key="sg.id"
-            class="subgraph-item"
+            :class="['subgraph-item', { selected: selectedSubgraph?.id === sg.id }]"
+            @click="$emit('select-subgraph', sg)"
           >
-            <div class="color-dot"></div>
+            <div class="color-dot" :style="{ background: sg.stroke || '#ff9800' }"></div>
             <span class="subgraph-name">{{ sg.label }}</span>
-            <button @click="$emit('remove-subgraph', sg.id)">×</button>
+            <button @click.stop="$emit('remove-subgraph', sg.id)">×</button>
           </div>
+        </div>
+      </div>
+
+      <!-- 子图属性 -->
+      <div v-if="selectedSubgraph" class="prop-group">
+        <div class="prop-group-title">子图属性</div>
+        <div class="prop-row">
+          <label>ID:</label>
+          <input type="text" :value="selectedSubgraph.id" readonly>
+        </div>
+        <div class="prop-row">
+          <label>标题:</label>
+          <input
+            type="text"
+            :value="selectedSubgraph.label"
+            @change="$emit('update-subgraph', { ...selectedSubgraph, label: $event.target.value })"
+          >
+        </div>
+        <div class="prop-row">
+          <label>填充:</label>
+          <input
+            type="color"
+            :value="selectedSubgraph.fill || '#fff3e0'"
+            @change="$emit('update-subgraph', { ...selectedSubgraph, fill: $event.target.value })"
+          >
+        </div>
+        <div class="prop-row">
+          <label>边框:</label>
+          <input
+            type="color"
+            :value="selectedSubgraph.stroke || '#ff9800'"
+            @change="$emit('update-subgraph', { ...selectedSubgraph, stroke: $event.target.value })"
+          >
         </div>
       </div>
 
@@ -130,12 +178,13 @@ const props = defineProps({
   subgraphs: Array,
   selectedNode: Object,
   selectedEdge: Object,
+  selectedSubgraph: Object,
   mermaidCode: String
 })
 
-const emit = defineEmits(['add-subgraph', 'remove-subgraph', 'update-node', 'update-edge', 'update-options', 'show-toast'])
+const emit = defineEmits(['add-subgraph', 'remove-subgraph', 'update-node', 'update-edge', 'update-subgraph', 'select-subgraph', 'update-options', 'show-toast'])
 
-const newSubgraph = reactive({ id: '', label: '' })
+const newSubgraph = reactive({ id: '', label: '', fill: '#fff3e0', stroke: '#ff9800' })
 const includeStyles = ref(true)
 
 // 选项变化时通知父组件
@@ -148,9 +197,16 @@ function addSubgraph() {
     emit('show-toast', '请输入子图ID', 'warning')
     return
   }
-  emit('add-subgraph', { id: newSubgraph.id, label: newSubgraph.label || newSubgraph.id })
+  emit('add-subgraph', {
+    id: newSubgraph.id,
+    label: newSubgraph.label || newSubgraph.id,
+    fill: newSubgraph.fill,
+    stroke: newSubgraph.stroke
+  })
   newSubgraph.id = ''
   newSubgraph.label = ''
+  newSubgraph.fill = '#fff3e0'
+  newSubgraph.stroke = '#ff9800'
 }
 
 function copyCode() {
@@ -158,9 +214,37 @@ function copyCode() {
     emit('show-toast', '没有内容', 'warning')
     return
   }
-  navigator.clipboard.writeText(props.mermaidCode).then(() => {
+
+  // 优先使用 Clipboard API（需要 HTTPS 或 localhost）
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(props.mermaidCode)
+      .then(() => {
+        emit('show-toast', '已复制到剪贴板', 'success')
+      })
+      .catch(() => {
+        // Clipboard API 失败时使用备用方法
+        fallbackCopy()
+      })
+  } else {
+    // 不支持 Clipboard API，使用备用方法
+    fallbackCopy()
+  }
+}
+
+function fallbackCopy() {
+  const textarea = document.createElement('textarea')
+  textarea.value = props.mermaidCode
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    document.execCommand('copy')
     emit('show-toast', '已复制到剪贴板', 'success')
-  })
+  } catch {
+    emit('show-toast', '复制失败，请手动复制', 'error')
+  }
+  document.body.removeChild(textarea)
 }
 
 function downloadCode() {
@@ -256,6 +340,14 @@ function downloadCode() {
   border-radius: 4px;
   margin-bottom: 4px;
   font-size: 12px;
+  cursor: pointer;
+}
+.subgraph-item.selected {
+  border-style: solid;
+  background: #ffe0b2;
+}
+.subgraph-item:hover {
+  background: #ffe0b2;
 }
 .color-dot {
   width: 12px;

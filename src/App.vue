@@ -36,6 +36,7 @@
         :subgraphs="subgraphs"
         :mode="mode"
         :selected-edge="selectedEdge"
+        :selected-subgraph="selectedSubgraph"
         :node-size="nodeSize"
         @add-node="addNode"
         @select-node="selectNode"
@@ -43,6 +44,8 @@
         @update-node="updateNode"
         @add-edge="addEdge"
         @edit-node="node => showInput('编辑节点文本', node.label, node)"
+        @select-subgraph="selectSubgraph"
+        @move-subgraph="moveSubgraph"
       />
     </div>
 
@@ -51,11 +54,14 @@
       :subgraphs="subgraphs"
       :selected-node="selectedNode"
       :selected-edge="selectedEdge"
+      :selected-subgraph="selectedSubgraph"
       :mermaid-code="mermaidCode"
       @add-subgraph="addSubgraph"
       @remove-subgraph="removeSubgraph"
       @update-node="updateNode"
       @update-edge="updateEdge"
+      @update-subgraph="updateSubgraph"
+      @select-subgraph="selectSubgraph"
       @update-options="updateOptions"
       @show-toast="showToast"
     />
@@ -87,6 +93,7 @@ const subgraphs = ref([])
 const nodeIdCounter = ref(1)
 const selectedNode = ref(null)
 const selectedEdge = ref(null)
+const selectedSubgraph = ref(null)
 const mode = ref('select')
 const flowDirection = ref('TD')
 const canvasRef = ref(null)
@@ -171,6 +178,7 @@ function updateNode(node) {
 function selectNode(node) {
   selectedNode.value = node
   selectedEdge.value = null
+  selectedSubgraph.value = null
 }
 
 // 连线操作
@@ -199,6 +207,13 @@ function updateEdge(edge) {
 function selectEdge(edge) {
   selectedEdge.value = edge
   selectedNode.value = null
+  selectedSubgraph.value = null
+}
+
+function selectSubgraph(sg) {
+  selectedSubgraph.value = sg
+  selectedNode.value = null
+  selectedEdge.value = null
 }
 
 // 更新输出选项
@@ -207,18 +222,45 @@ function updateOptions(options) {
 }
 
 // 子图操作
-function addSubgraph({ id, label }) {
+function addSubgraph({ id, label, fill, stroke }) {
   if (subgraphs.value.find(s => s.id === id)) {
     showToast('子图ID已存在', 'warning')
     return
   }
-  subgraphs.value.push({ id, label })
+  subgraphs.value.push({ id, label, fill, stroke })
+}
+
+function updateSubgraph(sg) {
+  const index = subgraphs.value.findIndex(s => s.id === sg.id)
+  if (index !== -1) {
+    subgraphs.value.splice(index, 1, { ...sg })
+    if (selectedSubgraph.value?.id === sg.id) {
+      selectedSubgraph.value = subgraphs.value[index]
+    }
+  }
 }
 
 function removeSubgraph(id) {
   subgraphs.value = subgraphs.value.filter(s => s.id !== id)
   nodes.value.forEach(n => {
     if (n.subgraph === id) n.subgraph = ''
+  })
+  if (selectedSubgraph.value?.id === id) {
+    selectedSubgraph.value = null
+  }
+}
+
+// 移动子图（移动所有内部节点）
+function moveSubgraph({ id, dx, dy, startPositions }) {
+  nodes.value = nodes.value.map(n => {
+    if (n.subgraph === id && startPositions[n.id]) {
+      return {
+        ...n,
+        x: startPositions[n.id].x + dx,
+        y: startPositions[n.id].y + dy
+      }
+    }
+    return n
   })
 }
 
@@ -312,14 +354,15 @@ function clearCanvas() {
   nodeIdCounter.value = 1
   selectedNode.value = null
   selectedEdge.value = null
+  selectedSubgraph.value = null
 }
 
 // 加载示例
 function loadExample() {
   clearCanvas()
   subgraphs.value = [
-    { id: 'login', label: '登录流程' },
-    { id: 'process', label: 'SN冲突处理' }
+    { id: 'login', label: '登录流程', fill: '#e3f2fd', stroke: '#1976d2' },
+    { id: 'process', label: 'SN冲突处理', fill: '#fce4ec', stroke: '#e91e63' }
   ]
 
   nodes.value = [
@@ -350,17 +393,6 @@ function loadExample() {
 
 function generateMermaid() {
   showToast('Mermaid 代码已生成！', 'success')
-}
-
-// 键盘快捷键
-if (typeof window !== 'undefined') {
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-        deleteSelected()
-      }
-    }
-  })
 }
 </script>
 
